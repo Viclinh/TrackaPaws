@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TrackaPaws</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 600px;
+            width: 80%;
+            margin-left: 20%;
+        }
+        #legend {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            font-size: 14px;
+        }
+        .cold { color: blue; }
+        .safe { color: green; }
+        .hot { color: red; }
+        #legend p {
+            display: inline-block;
+            margin-right: 10px;
+        }
+        #infoBox {
+            position: absolute;
+            top: 20px;
+            left: 10px;
+            width: 150px;
+            background: white;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            font-size: 14px;
+            max-height: 400px;
+            overflow-y: scroll;
+        }
+        #infoBox h3 {
+            margin-top: 0;
+        }
+        #controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+            font-size: 14px;
+            display: flex;
+            flex-direction: column;
+            z-index: 1000; 
+        }
+        #controls input, #controls button {
+            margin-bottom: 10px;
+            width: 200px; 
+        }
+    </style>
+</head>
+<body>
+    <div id="infoBox">
+        <h3>Hot/Cold Alerts - Act Now</h3>
+        <ul id="points-list">
+            
+        </ul>
+        <button id="playBtn">Play Alert</button>
+    </div>
+    <div id="map"></div>
+    <div id="legend">
+        <p><span class="cold">&#9632;</span> Blue is Cold (Below 45°F)</p>
+        <p><span class="safe">&#9632;</span> Green is Safe (45°F - 85°F)</p>
+        <p><span class="hot">&#9632;</span> Red is Hot (Above 85°F)</p>
+    </div>
+    
+    <div id="controls">
+        <input type="number" id="searchNumber" placeholder="Search by number" />
+        <button id="searchBtn">Search</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+    
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        var map = L.map('map').setView([30.48002, -87.20997], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        var data = [
+            { lat: 30.48002, lon: -87.20997, temp: 21.95, number: 1 },
+            { lat: 30.45994, lon: -87.20899, temp: 21.92, number: 2 },
+            { lat: 30.48002, lon: -87.20997, temp: 22.02, number: 3 },
+            { lat: 30.45994, lon: -87.20899, temp: 22.07, number: 4 },
+            { lat: 30.52008, lon: -87.21001, temp: 22.07, number: 5 },
+            { lat: 30.48002, lon: -87.20997, temp: 22.16, number: 6 },
+            { lat: 30.52008, lon: -87.21001, temp: 22.23, number: 7 },
+            { lat: 30.48002, lon: -87.17018, temp: 22.22, number: 8 },
+            { lat: 30.45975, lon: -87.16556, temp: 21.7, number: 9 },
+            { lat: 30.48002, lon: -87.20997, temp: 20.07, number: 10 },
+            { lat: 30.48002, lon: -87.20997, temp: 19.48, number: 11 },
+            { lat: 30.48002, lon: -87.20997, temp: 18.82, number: 12 },
+            { lat: 30.49887, lon: -87.24621, temp: 17.06, number: 13 },
+            { lat: 30.49887, lon: -87.24621, temp: 12.78, number: 14 },
+            { lat: 30.49887, lon: -87.24621, temp: 11.41, number: 15 },
+            { lat: 30.59999228, lon: -87.61000156, temp: 10.16, number: 16 },
+            { lat: 30.68035, lon: -88.04461, temp: 3.00, number: 17 },
+            { lat: 30.62093, lon: -88.08859, temp: 7.6, number: 18 },
+            { lat: 35.07997, lon: -89.96117, temp: 8.97, number: 19 },
+            { lat: 35.07997, lon: -89.96117, temp: 9.62, number: 20 },
+            { lat: 35.07997, lon: -89.96117, temp: 11.24, number: 21 },
+            { lat: 35.07997, lon: -89.96117, temp: 13.48, number: 22 },
+            { lat: 35.07997, lon: -89.96117, temp: 90.00, number: 23 }
+        ];
+
+        var markers = [];
+
+        function celsiusToFahrenheit(celsius) {
+            return (celsius * 9/5) + 32;
+        }
+
+        // Generate the map markers and populate the left-side box with hot/cold alerts
+        data.forEach(point => {
+            let tempF = celsiusToFahrenheit(point.temp);
+            let color, description;
+
+            if (tempF < 45) {
+                color = 'blue';
+                description = 'Cold';
+            } else if (tempF > 85) {
+                color = 'red';
+                description = 'Hot';
+            } else {
+                color = 'green';
+                description = 'Safe';
+            }
+
+            var marker = L.circleMarker([point.lat, point.lon], {
+                radius: 8,
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.5
+            }).addTo(map);
+
+            markers[point.number] = marker;
+
+            marker.on('mouseover', function () {
+                marker.bindPopup(`
+                    <b>Latitude:</b> ${point.lat}<br>
+                    <b>Longitude:</b> ${point.lon}<br>
+                    <b>Temperature:</b> ${point.temp.toFixed(2)}°C / ${tempF.toFixed(2)}°F<br>
+                    <b>Number:</b> ${point.number}
+                `).openPopup();
+            });
+
+            // Only add hot/cold points to the infoBox
+            if (color === 'blue' || color === 'red') {
+                var pointsList = document.getElementById('points-list');
+                var listItem = document.createElement('li');
+                listItem.innerHTML = `Number: ${point.number} (${description})`;
+                pointsList.appendChild(listItem);
+            }
+        });
+
+        // Function to call OpenAI API to convert text to voice
+        async function playAlertAudio(alertText) {
+            const response = await fetch('https://api.openai.com/v1/audio/generate', {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'Bearer xxx',
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: 'text-to-speech',
+                    prompt: alertText,
+                    voice: 'en_us_male',
+                    max_duration: 10
+                })
+            });
+
+            if (response.ok) {
+                const audioData = await response.json();
+                const audioElement = new Audio(audioData.audio_url);
+                audioElement.play();
+            } else {
+                console.error('Error generating audio:', response.statusText);
+            }
+        }
+
+        // Set up play button
+        document.getElementById('playBtn').addEventListener('click', function () {
+            const alertText = 'Attention! Cold and hot temperature alerts. Please check the map for more details!';
+            playAlertAudio(alertText); // Play alert sound
+        });
+
+        // Search functionality
+        document.getElementById('searchBtn').addEventListener('click', function () {
+            var searchNumber = document.getElementById('searchNumber').value;
+            if (markers[searchNumber]) {
+                var marker = markers[searchNumber];
+                map.setView(marker.getLatLng(), 14);
+                marker.setStyle({ weight: 5, color: 'black' });
+            } else {
+                alert('Number not found.');
+            }
+        });
+
+        // Reset functionality
+        document.getElementById('resetBtn').addEventListener('click', function () {
+            var searchNumber = document.getElementById('searchNumber').value;
+            if (searchNumber && markers[searchNumber]) {
+                var marker = markers[searchNumber];
+                marker.setStyle({ weight: 1, color: marker.options.color });
+            }
+            document.getElementById('searchNumber').value = ''; // Clear search input
+            map.setView([30.48002, -87.20997], 6); // Reset map to initial view
+        });
+    </script>
+</body>
+</html>
